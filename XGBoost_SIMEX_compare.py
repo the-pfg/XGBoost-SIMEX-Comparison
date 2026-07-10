@@ -347,7 +347,7 @@ class XGBandSIMEXcompare(QgsProcessingAlgorithm):
         
         #check that rasters have same shape
         if xgb_pred_array.shape != simex_legality_array.shape:
-            raise QgsProcessingException(f"Raster shapes dont match. XGB: {xgb_pred_array.shape} SIMEX: {simex_pred_array.shape}.")
+            raise QgsProcessingException(f"Raster shapes dont match. XGB: {xgb_pred_array.shape} SIMEX: {simex_legality_array.shape}.")
         
         #mask out NoData and flatten
         valid_mask = (xgb_pred_array != xgb_nodata) & (simex_legality_array != simex_nodata)
@@ -356,14 +356,14 @@ class XGBandSIMEXcompare(QgsProcessingAlgorithm):
         
         #build the agreement matrix
         xgb_burned = (xgb_valid == 0)
-        xgb_logging = (xgb_valid == 1)
+        xgb_logged = (xgb_valid == 1)
         xgb_intact = (xgb_valid == 2)
         simex_logging = (simex_valid != -1)
         
         n_00 = int((~simex_logging & xgb_intact).sum())     #intact agreement
-        n_11 = int((simex_logging & xgb_logging).sum())     #logged agreement
+        n_11 = int((simex_logging & xgb_logged).sum())     #logged agreement
         n_10 = int((simex_logging & xgb_intact).sum())      #simex logged, xgb no logged
-        n_01 = int((~simex_logging & xgb_logging).sum())    #simex no logging, xgb logging
+        n_01 = int((~simex_logging & xgb_logged).sum())    #simex no logging, xgb logging
         
         agreement_df = pd.DataFrame(
             [[n_00, n_01], [n_10, n_11]],
@@ -464,10 +464,30 @@ class XGBandSIMEXcompare(QgsProcessingAlgorithm):
         agreement_output_path = self.parameterAsOutputLayer(parameters, self.OUTPUT3, context)
         shutil.copyfile(agreement_raster.source(), agreement_output_path)
 
+        #compute agreement by legality
+        simex_legal = (simex_valid == 0)
+        simex_illegal = (simex_valid == 1)
         
+        legal_intact = int((simex_legal & xgb_intact).sum())
+        legal_logged = int((simex_legal & xgb_logged).sum())
+        illegal_intact = int((simex_illegal & xgb_intact).sum())
+        illegal_logged = int((simex_illegal & xgb_logged).sum())
+        legal_total = legal_intact + legal_logged
+        illegal_total = illegal_intact + illegal_logged
         
-        # report_path = self.parameterAsFileOutput(parameters, self.OUTPUT_REPORT, context)
-
+        legal_agreement = legal_logged / legal_total
+        illegal_agreement = illegal_logged / illegal_total
+        
+        legality_df = pd.DataFrame(
+            [[legal_intact, legal_logged, legal_total],
+             [illegal_intact, illegal_logged, illegal_total]],
+            index = ["SIMEX Legal", "SIMEX Illegal"],
+            columns = ["XGB Intact", "XGB Logged", "Row Total"],
+        )
+        feedback.pushInfo(f"Legality Agreement Matrix (Pixel Count): \n{legality_df.to_string()}")
+        feedback.pushInfo(f"Legal Agreement: {legal_agreement} \nIllegal Agreement: {illegal_agreement}")
+        
+        #
         
         # #create an output sink containing layers to display to the user
         # (sink, dest_id) = self.parameterAsSink(
