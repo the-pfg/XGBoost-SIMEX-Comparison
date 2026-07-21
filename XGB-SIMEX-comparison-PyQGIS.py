@@ -5,8 +5,9 @@ from qgis import processing
 from processing.core.Processing import Processing
 import shutil
 from osgeo import gdal
-import numpy as np
 import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt, colors as clr
 
 import time
 start_time = time.perf_counter()
@@ -44,7 +45,7 @@ def rasterize_field(layer, field, extent_string, pixel_size, context, feedback, 
     raster = QgsProcessingUtils.mapLayerFromString(result_id, context)
 
     if raster is None:
-        raise QgsProcessingException(f"Failed to rasterize {name}, {field}")
+        raise Exception(f"Failed to rasterize {name}, {field}")
     return raster
 
 # raster stacking helper function
@@ -64,7 +65,7 @@ def stack_bands(raster_layers, context, feedback, name):
     )["OUTPUT"]
     stacked = QgsProcessingUtils.mapLayerFromString(result_id, context)
     if stacked is None:
-        raise QgsProcessingException(f"Failed to stack bands for {name}")
+        raise Exception(f"Failed to stack bands for {name}")
     return stacked
 
 def total_area(layer):
@@ -74,7 +75,7 @@ def total_area(layer):
     return total
 
 # BEGIN PROCESSING BLOCK
-def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output, agreement_output, year0):
+def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output, agreement_output, year0, temp_option):
     context = QgsProcessingContext()
     feedback = QgsProcessingFeedback()
 
@@ -150,8 +151,17 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     xgb_layer = stack_bands(raster_bands, context, feedback, "xgb")
 
     # access user-defined year of analysis and retrieve only those SIMEX polygons
-    simex_formula = f' "Ano" = \'{year0}\' OR "Ano" = \'{year0-1}\' '
-    #OR "Ano" = \'{year0 + 1}\'
+    if temp_option == 0:
+        simex_formula = f' "Ano" = \'{year0}\' '
+    elif temp_option == 1:
+        simex_formula = f' "Ano" = \'{year0}\' OR "Ano" = \'{year0 + 1}\' '
+    elif temp_option == 2:
+        simex_formula = f' "Ano" = \'{year0}\' OR "Ano" = \'{year0-1}\' '
+    elif temp_option == 3:
+        simex_formula = f' "Ano" = \'{year0}\' OR "Ano" = \'{year0 + 1}\' OR "Ano" = \'{year0-1}\' '
+    else:
+        raise Exception("INVALID TEMPORAL HANDLING OPTION")
+
     filter_simex = processing.run(
         "native:extractbyexpression",
         {"INPUT": simex_layer, "EXPRESSION": simex_formula, "OUTPUT": "memory:"},
@@ -221,14 +231,14 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
         },
         context=context, feedback=feedback, is_child_algorithm=True,
     )["OUTPUT"]
-    simex_layer = QgsProcessingUtils.mapLayerFromString(simex_legality, context)
+    simex_polys = QgsProcessingUtils.mapLayerFromString(simex_legality, context)
 
     # rasterize simex polygons to two-band raster
     simex_fields = ["Year", "Legality"]
     pixel_size = 500
 
     raster_bands = [
-        rasterize_field(simex_layer, f, extent_string, pixel_size, context, feedback, "simex")
+        rasterize_field(simex_polys, f, extent_string, pixel_size, context, feedback, "simex")
         for f in simex_fields
     ]
 
@@ -260,7 +270,7 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
 
     # check that rasters have same shape
     if xgb_pred_array.shape != simex_legality_array.shape:
-        raise QgsProcessingException(
+        raise Exception(
             f"Raster shapes dont match. XGB: {xgb_pred_array.shape} SIMEX: {simex_legality_array.shape}.")
 
     # mask out NoData and flatten
@@ -401,27 +411,102 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     print(f"Legality Agreement Matrix (Pixel Count): \n{legality_df.to_string()}")
     print(f"Legal Agreement: {legal_agreement} \nIllegal Agreement: {illegal_agreement}")
 
-    return {
+    # # compute fractional area agreement using Zonal Histogram tool
+    # zonal_hist_layer = processing.run(
+    #     "native:zonalhistogram",
+    #     {
+    #         "INPUT_RASTER"  : xgb_layer,
+    #         "RASTER_BAND"   : xgb_fields.index("pred"),
+    #         "INPUT_VECTOR"  : simex_polys,
+    #         "OUTPUT"        : "memory:"
+    #     },
+    #     context=context, feedback=feedback, is_child_algorithm=True,
+    # )
+
+    # zonal_hist_layer = processing.run(
+    #     "native:fieldcalculator",
+    #     {
+    #         ""
+    #     }
+    # )
+
+    # build record for the year to return, round to 4 decimal places
+    row_output = [year0, n_00, n_01, n_10, n_11, prod_intact, omiss_intact, prod_logged, omiss_logged, user_intact, commiss_intact, user_logged, commiss_logged,
+                  overall_agreement, quantity_disagreement, allocation_disagreement,
+                  legal_intact, legal_logged, legal_total, legal_agreement, illegal_intact, illegal_logged, illegal_total, illegal_agreement,
+                  b0, b1, bT, burned_confusion]
+
+    return (
         xgb_output,
         simex_output,
         agreement_output,
-    }
+        row_output
+    )
 
 if __name__ == "__main__":
-    years = [2021, 2022]
+    years = [2019, 2020, 2021, 2022, 2023, 2024]
+
+    # temporal handling option
+    # 0 - No Temporal Adjustment, 1 - Next Year's SIMEX Polygons Included, 2 - Previous Year's SIMEX Polygons Masked-out, 3 - Both Adjustments
+    # if 0 is not selected, ensure SIMEX shapefile includes at least one year before the first XGBoost year, and the one year after the last XGBoost year for correct results
+    temporal_handling_mode = 0
+
+    results_df = pd.DataFrame(
+        columns = [ "Year", "Intact Agreement", "XGB Logged Disagreement", "XGB Intact Disagreement", "Logged Agreement",
+                    "Intact Producer Agreement", "Intact Omission", "Logged Producer Agreement", "Logged Omission",
+                    "Intact User Agreement", "Intact Commission", "Logged User Agreement", "Logged Commission",
+                    "Overall Agreement", "Quantity Disagreement", "Allocation Disagreement",
+                    "legal_intact", "legal_logged", "legal_total", "Legal Agreement",
+                    "illegal_intact", "illegal_logged", "illegal_total", "Illegal Agreement",
+                    "Burned No SIMEX", "Burned With SIMEX", "Total Burned", "Burned Confusion"]
+    )
+
     for year0 in years:
         print(f"ANALYZING YEAR {year0} ------------------------------------------------------------")
         try:
             results = compare_xgb_simex(
                 xgb_input_path = fr"./INPUTS/{year0}_results.shp",
                 simex_input_path = r"./INPUTS/simex_polys.shp",
-                xgb_output = fr"./OUTPUTS/{year0}_xgb_YR-1.tif",
-                simex_output = fr"./OUTPUTS/{year0}_simex_YR-1.tif",
-                agreement_output = fr"./OUTPUTS/{year0}_agreement_YR-1.tif",
+                xgb_output = fr"./OUTPUTS/{year0}_xgb.tif",
+                simex_output = fr"./OUTPUTS/{year0}_simex.tif",
+                agreement_output = fr"./OUTPUTS/{year0}_agreement.tif",
                 year0 = year0,
+                temp_option = temporal_handling_mode,
             )
             print(results)
+            results_df.loc[len(results_df)] = results[3]
         finally:
             end_time = time.perf_counter()
             print(f"Completed in {end_time - start_time} seconds")
+
     qgs.exitQgis() #exit QGIS (removes provider and layer registries from memory)
+
+    results_df.to_csv(r"./OUTPUTS/results.csv", index=False)
+
+    fig = plt.figure(figsize=(12,8))
+    plt.plot(results_df['Year'], results_df['Overall Agreement'], label="Overall Agreement", color = 'g')
+    plt.plot(results_df['Year'], results_df['Intact Producer Agreement'], label="Intact Producer Agreement", color = 'b')
+    plt.plot(results_df['Year'], results_df['Logged Producer Agreement'], label="Logged Producer Agreement", color = 'r')
+    plt.plot(results_df['Year'], results_df['Intact User Agreement'], label="Intact User Agreement", color = 'k')
+    plt.plot(results_df['Year'], results_df['Logged User Agreement'], label="Logged User Agreement", color = 'm')
+    plt.plot(results_df['Year'], results_df['Quantity Disagreement'], label="Quantity Disagreement", color = 'c')
+    plt.plot(results_df['Year'], results_df['Allocation Disagreement'], label="Allocation Disagreement", color = clr.CSS4_COLORS["darkviolet"])
+    plt.title("XGBoost and SIMEX Comparison Metrics")
+    plt.xlabel("Year")
+    plt.ylabel("Agreement/Disagreement %")
+    plt.legend()
+    plt.ticklabel_format(useOffset=False)
+    plt.savefig(r"./OUTPUTS/main_agreement_metrics.png", dpi = 300, bbox_inches = "tight")
+    plt.show()
+
+    fig2 = plt.figure(figsize=(12,8))
+    plt.plot(results_df['Year'], results_df['Legal Agreement'], label = "Legal SIMEX Agreement", color = clr.CSS4_COLORS["yellowgreen"])
+    plt.plot(results_df['Year'], results_df['Illegal Agreement'], label = "Illegal SIMEX Agreement", color = clr.CSS4_COLORS["limegreen"])
+    plt.plot(results_df['Year'], results_df['Burned Confusion'], label = "Burned Confusion", color = clr.CSS4_COLORS["darkorange"])
+    plt.title("XGBoost and SIMEX Comparison Auxiliary Metrics")
+    plt.xlabel("Year")
+    plt.ylabel("Agreement/Confusion %")
+    plt.legend()
+    plt.ticklabel_format(useOffset=False)
+    plt.savefig(r"./OUTPUTS/auxiliary_agreement_metrics.png", dpi = 300, bbox_inches = "tight")
+    plt.show()
