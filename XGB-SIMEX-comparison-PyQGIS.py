@@ -441,6 +441,7 @@ if __name__ == "__main__":
 
 # ============================================== CONFIG OPTIONS =========================================================
 
+
     #specify collection of years to analyze
     years = [2019, 2020, 2021, 2022, 2023, 2024]
 
@@ -456,6 +457,8 @@ if __name__ == "__main__":
     logging_metrics_filename = 'main_agreement_metrics'
     burned_legality_metrics_filename = 'auxiliary_agreement_metrics'
 
+    # QGIS installation location (double check, this default value is a typical location)
+    qgis_install = r"C:/PROGRA~1/QGIS34~1.11/apps/qgis-ltr"
 
 # =============================================== ^ ^ ^ ^ ^ ^ ^ =========================================================
 
@@ -473,7 +476,7 @@ if __name__ == "__main__":
 
     print("Opening QGIS...")
     # supply path to qgis install location
-    QgsApplication.setPrefixPath(r"C:/PROGRA~1/QGIS34~1.11/apps/qgis-ltr", True)
+    QgsApplication.setPrefixPath(qgis_install, True)
 
     # create a reference to the QgsApplication, False = no GUI
     qgs = QgsApplication([], False)
