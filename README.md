@@ -21,4 +21,4 @@ Running the XGB-SIMEX-comparison-PyQGIS.py file should now produce the desired r
 - Define the list of years to analyze, which temporal handling mode to use, and input/output file names in the "CONFIG OPTIONS" section located at the top of the main block.
 - Double check that the qgis_install path matches the working directory of your QGIS installation. The working directory can be found by opening the Python console in QGIS and entering:
   " print(QgsApplication.prefixPath()) "
-  _- Make sure to follow the stipulations detailed in the comments of the CONFIG OPTIONS block. Most critical are the QGIS path and INPUT file names. _
+  - *Make sure to follow the stipulations detailed in the comments of the CONFIG OPTIONS block. Most critical are the QGIS path and INPUT file names. *
