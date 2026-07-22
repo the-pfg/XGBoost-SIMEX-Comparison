@@ -18,12 +18,7 @@ Running the XGB-SIMEX-comparison-PyQGIS.py file should now produce the desired r
 
 ## Using the Script
 
-- Define the list of years to analyze, which temporal handling mode to use, and output file names in the "CONFIG OPTIONS" section located at the top of the main block.
+- Define the list of years to analyze, which temporal handling mode to use, and input/output file names in the "CONFIG OPTIONS" section located at the top of the main block.
 - Double check that the qgis_install path matches the working directory of your QGIS installation. The working directory can be found by opening the Python console in QGIS and entering:
   " print(QgsApplication.prefixPath()) "
-
-#### Formatting INPUT files:
-- In order for the script to properly find the XGBoost and SIMEX shapefiles for the comparison, you must format the names of the shapefiles as:
-  - XGB: " YYYY_results.shp " where YYYY is the associated 4 digit year
-  - SIMEX: " simex_polys.shp "
-- And finally, place them within the INPUTS folder.
+  _- Make sure to follow the stipulations detailed in the comments of the CONFIG OPTIONS block. Most critical are the QGIS path and INPUT file names. _
