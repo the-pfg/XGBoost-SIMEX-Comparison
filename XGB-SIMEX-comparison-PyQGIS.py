@@ -1,28 +1,3 @@
-# importing all necessary libraries
-from qgis._analysis import QgsNativeAlgorithms
-from qgis.core import *
-from qgis import processing
-from processing.core.Processing import Processing
-import shutil
-from osgeo import gdal
-import pandas as pd
-import numpy as np
-from matplotlib import pyplot as plt, colors as clr
-
-import time
-start_time = time.perf_counter()
-
-#supply path to qgis install location
-QgsApplication.setPrefixPath(r"C:/PROGRA~1/QGIS34~1.11/apps/qgis-ltr", True)
-
-#create a reference to the QgsApplication, False = no GUI
-qgs = QgsApplication([], False)
-
-#load providers
-qgs.initQgis()
-Processing.initialize()
-QgsApplication.processingRegistry().addProvider(QgsNativeAlgorithms())
-
 # rasterization helper function
 def rasterize_field(layer, field, extent_string, pixel_size, context, feedback, name):
     file_path = QgsProcessingUtils.generateTempFilename(f"{name}_{field}.tif")
@@ -79,6 +54,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     context = QgsProcessingContext()
     feedback = QgsProcessingFeedback()
 
+    print("Loading and Fixing Geometries...")
+
     #load layers from disk
     xgb_source = QgsVectorLayer(xgb_input_path)
     simex_source = QgsVectorLayer(simex_input_path)
@@ -103,6 +80,7 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     simex_layer = QgsProcessingUtils.mapLayerFromString(simex_fixed, context)
 
     # ensure all layers share a common projection system (EPSG:32721)
+    print("Reprojecting Layers...")
     target_crs = QgsCoordinateReferenceSystem("EPSG:32721")
 
     reproj_xgb = processing.run(
@@ -125,6 +103,7 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
 
     # rasterize XGBoost
     # filter to non-null polygons, burn in each field, combine into multi-band raster
+    print("Rasterizing XGB...")
     formula = '"n_0" IS NOT NULL'
 
     filter_xgb = processing.run(
@@ -137,7 +116,7 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     xgb_layer = QgsProcessingUtils.mapLayerFromString(filter_xgb, context)
 
     # use helper function to run rasterization
-    xgb_fields = ["prob_brn", "prob_cvl", "prob_int", "pred", "purity"]
+    xgb_fields = ["prob_brn", "prob_cvl", "prob_int", "pred"]
     extent = xgb_layer.extent()
     extent_string = f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()} [{xgb_layer.crs().authid()}]"
     pixel_size = 500
@@ -149,6 +128,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
 
     # use helper function to stack into one multi-band raster
     xgb_layer = stack_bands(raster_bands, context, feedback, "xgb")
+
+    print("Extracting SIMEX Polygons...")
 
     # access user-defined year of analysis and retrieve only those SIMEX polygons
     if temp_option == 0:
@@ -172,6 +153,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     simex_layer = QgsProcessingUtils.mapLayerFromString(filter_simex, context)
     print(f"SIMEX features matched: {simex_layer.featureCount()}")
 
+    print("Creating No Logging Polygon...")
+
     # construct the 'no logging' SIMEX polygon and combine with SIMEX polygons
     xgb_extent = processing.run(
         "native:extenttolayer",
@@ -194,6 +177,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
         context=context, feedback=feedback, is_child_algorithm=True,
     )["OUTPUT"]
     simex_layer = QgsProcessingUtils.mapLayerFromString(simex_union, context)
+
+    print("Rasterizing SIMEX...")
 
     # create integer fields in SIMEX for rasterization
     simex_year = processing.run(
@@ -245,6 +230,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     # use helper function to stack into one multi-band raster
     simex_layer = stack_bands(raster_bands, context, feedback, "simex")
 
+    print("Saving XGB and SIMEX Layers...")
+
     # output raster(s)
     shutil.copyfile(xgb_layer.source(), xgb_output)
     shutil.copyfile(simex_layer.source(), simex_output)
@@ -253,6 +240,7 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     print(f"XGB raster CRS: {xgb_layer.crs().authid()}")
     print(f"SIMEX raster CRS: {simex_layer.crs().authid()}")
 
+    print("Building Logging Comparison...")
     # BUILDING COMPARISON METRICS
     # obtain raster layer bands as arrays
     xgb = gdal.Open(xgb_output)
@@ -265,9 +253,6 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     simex_legality_array = simex_legality_band.ReadAsArray()
     simex_nodata = simex_legality_band.GetNoDataValue()
 
-    print(f"XGB extent: {xgb_layer.extent().toString()}")
-    print(f"SIMEX (post-union) extent: {simex_layer.extent().toString()}")
-
     # check that rasters have same shape
     if xgb_pred_array.shape != simex_legality_array.shape:
         raise Exception(
@@ -275,7 +260,6 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
 
     # mask out NoData and flatten
     valid_mask = (xgb_pred_array != xgb_nodata) & (simex_legality_array != simex_nodata)
-    print(f"Total valid pixels: {valid_mask.sum()}")
     xgb_valid = xgb_pred_array[valid_mask]
     simex_valid = simex_legality_array[valid_mask]
 
@@ -347,6 +331,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
         f"Quantity: {quantity_disagreement:.3f} + Allocation: {allocation_disagreement:.3f}"
     )
 
+    print("Building Burned Confusion...")
+
     # building the burned confusion matrix
     b0 = int((xgb_burned & ~simex_logging).sum())
     b1 = int((xgb_burned & simex_logging).sum())
@@ -360,6 +346,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     )
     print(f"Burned Confusion Matrix (Pixel Count): \n{burned_df.to_string()}")
     print(f"Burned Confusion %: {burned_confusion}")
+
+    print("Building Agreement Raster...")
 
     # build agreement type map
     agreement_map_path = QgsProcessingUtils.generateTempFilename("agreement_map.tif")
@@ -386,7 +374,11 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     )["OUTPUT"]
     agreement_raster = QgsProcessingUtils.mapLayerFromString(agreement_raster, context)
 
+    print("Saving Agreement Raster...")
+
     shutil.copyfile(agreement_raster.source(), agreement_output)
+
+    print("Calculating Legality Agreements...")
 
     # compute agreement by legality
     simex_legal = (simex_valid == 0)
@@ -436,6 +428,8 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
                   legal_intact, legal_logged, legal_total, legal_agreement, illegal_intact, illegal_logged, illegal_total, illegal_agreement,
                   b0, b1, bT, burned_confusion]
 
+    print("Done! Files are saved at the paths specified in the OUTPUTS folder.")
+
     return (
         xgb_output,
         simex_output,
@@ -444,12 +438,50 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     )
 
 if __name__ == "__main__":
+
+# ============================================== CONFIG OPTIONS =========================================================
+
+    #specify collection of years to analyze
     years = [2019, 2020, 2021, 2022, 2023, 2024]
 
     # temporal handling option
     # 0 - No Temporal Adjustment, 1 - Next Year's SIMEX Polygons Included, 2 - Previous Year's SIMEX Polygons Masked-out, 3 - Both Adjustments
     # if 0 is not selected, ensure SIMEX shapefile includes at least one year before the first XGBoost year, and the one year after the last XGBoost year for correct results
     temporal_handling_mode = 0
+
+    # specify file names to export results as
+    xgb_filename = 'xgb'
+    simex_filename = 'simex'
+    agreement_filename = 'agreement'
+    logging_metrics_filename = 'main_agreement_metrics'
+    burned_legality_metrics_filename = 'auxiliary_agreement_metrics'
+
+
+# =============================================== ^ ^ ^ ^ ^ ^ ^ =========================================================
+
+    # import all necessary libraries
+    from qgis._analysis import QgsNativeAlgorithms
+    from qgis.core import *
+    from qgis import processing
+    from processing.core.Processing import Processing
+    import shutil
+    from osgeo import gdal
+    import pandas as pd
+    from matplotlib import pyplot as plt, colors as clr
+    import time
+    start_time = time.perf_counter()
+
+    print("Opening QGIS...")
+    # supply path to qgis install location
+    QgsApplication.setPrefixPath(r"C:/PROGRA~1/QGIS34~1.11/apps/qgis-ltr", True)
+
+    # create a reference to the QgsApplication, False = no GUI
+    qgs = QgsApplication([], False)
+
+    # load providers
+    qgs.initQgis()
+    Processing.initialize()
+    QgsApplication.processingRegistry().addProvider(QgsNativeAlgorithms())
 
     results_df = pd.DataFrame(
         columns = [ "Year", "Intact Agreement", "XGB Logged Disagreement", "XGB Intact Disagreement", "Logged Agreement",
@@ -467,9 +499,9 @@ if __name__ == "__main__":
             results = compare_xgb_simex(
                 xgb_input_path = fr"./INPUTS/{year0}_results.shp",
                 simex_input_path = r"./INPUTS/simex_polys.shp",
-                xgb_output = fr"./OUTPUTS/{year0}_xgb.tif",
-                simex_output = fr"./OUTPUTS/{year0}_simex.tif",
-                agreement_output = fr"./OUTPUTS/{year0}_agreement.tif",
+                xgb_output = fr"./OUTPUTS/{year0}_{xgb_filename}.tif",
+                simex_output = fr"./OUTPUTS/{year0}_{simex_filename}.tif",
+                agreement_output = fr"./OUTPUTS/{year0}_{agreement_filename}.tif",
                 year0 = year0,
                 temp_option = temporal_handling_mode,
             )
@@ -496,8 +528,7 @@ if __name__ == "__main__":
     plt.ylabel("Agreement/Disagreement %")
     plt.legend()
     plt.ticklabel_format(useOffset=False)
-    plt.savefig(r"./OUTPUTS/main_agreement_metrics.png", dpi = 300, bbox_inches = "tight")
-    plt.show()
+    plt.savefig(fr"./OUTPUTS/{logging_metrics_filename}.png", dpi = 300, bbox_inches = "tight")
 
     fig2 = plt.figure(figsize=(12,8))
     plt.plot(results_df['Year'], results_df['Legal Agreement'], label = "Legal SIMEX Agreement", color = clr.CSS4_COLORS["yellowgreen"])
@@ -508,5 +539,4 @@ if __name__ == "__main__":
     plt.ylabel("Agreement/Confusion %")
     plt.legend()
     plt.ticklabel_format(useOffset=False)
-    plt.savefig(r"./OUTPUTS/auxiliary_agreement_metrics.png", dpi = 300, bbox_inches = "tight")
-    plt.show()
+    plt.savefig(fr"./OUTPUTS/{burned_legality_metrics_filename}.png", dpi = 300, bbox_inches = "tight")
