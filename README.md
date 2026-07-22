@@ -25,4 +25,4 @@ Running the XGB-SIMEX-comparison-PyQGIS.py file should now produce the desired r
 - In order for the script to properly find the XGBoost and SIMEX shapefiles for the comparison, you must format the names of the shapefiles as:
   - XGB: " YYYY_results.shp " where YYYY is the associated 4 digit year
   - SIMEX: " simex_polys.shp "
-and finally, place them within the INPUTS folder.
+- And finally, place them within the INPUTS folder.
