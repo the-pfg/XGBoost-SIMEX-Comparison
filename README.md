@@ -6,7 +6,7 @@ A QGIS processing script written in Python to compare land cover classification 
 - Download the XGB-SIMEX-comparison-PyQGIS.py file along with the INPUTS and OUTPUTS file folders
 - Create a new project in a Python IDE of your choice, and drop the files above into the project folder
 
-### Environment setup:
+#### Environment setup:
 - Ensure that you have an installation of QGIS on your computer. This script was built using QGIS Long-term Release 3.44.11
 - Point your project's Python environment to the Python interpreter present in your QGIS installation. This is typically located under
   C:/Program Files/QGIS 3.xx.xx/apps/Python312/python.exe, or a similar directory
