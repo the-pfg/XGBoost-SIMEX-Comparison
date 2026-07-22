@@ -48,5 +48,9 @@ The agreement raster is a single-band raster that characterizes the agreement/di
 The `results.csv` file appears in the OUTPUTS folder and contains all comparison metrics seen in the python console output for each year. The comparison metric graphs are simple line plots displaying the comparison
 metrics over time. The graphs will only appear correctly if more than one year is analyzed.
 
+## Code Methodology and Workflow
+
+## Other Notes
+
 
 
