@@ -1,5 +1,5 @@
 # XGBoost-SIMEX-Comparison
-A QGIS processing script written in Python to compare land cover classification output by an XGBoost model to SIMEX.
+A PyQGIS script to compare land cover classification output by an XGBoost model to SIMEX.
 
 ## Installation and Environment Requirements
 
