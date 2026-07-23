@@ -49,8 +49,13 @@ The `results.csv` file appears in the OUTPUTS folder and contains all comparison
 metrics over time. The graphs will only appear correctly if more than one year is analyzed.
 
 ## Code Methodology and Workflow
+This python script primarily utilizes geoprocessing tools supplied by the PyQGIS API and OSGeo. The tools are used to:
+- Fix geometries of input layers
+- Reproject input layers to WGS 84/UTM zone 21S (EPSG:32721)
+- Rasterize fields of XGBoost input and combine into one multi-band raster
+- Filter SIMEX dataset for years that the user specifies
+- Create a 'no logging' polygon that fills the extent of XGBoost
+- Rasterize the year and legality fields from SIMEX
+- Build the agreement raster
 
-## Other Notes
-
-
-
+The comparison metrics are computed, displayed, and exported using standard Python packages such as pandas and matplotlib.
