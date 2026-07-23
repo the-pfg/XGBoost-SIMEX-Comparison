@@ -1,2 +1,1 @@
-this is another info doc
-:))
+Place the XGBoost classification and SIMEX polygon shapefiles in this folder. Ensure their names match the provided names in the CONFIG OPTIONS located inside the main script.
