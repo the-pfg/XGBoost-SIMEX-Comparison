@@ -1,2 +1,1 @@
-this is an info document
-:)
+This folder is where the outputs of the main script will be exported. Their names can be specified within the CONFIG OPTIONS block in the script.
