@@ -43,12 +43,6 @@ def stack_bands(raster_layers, context, feedback, name):
         raise Exception(f"Failed to stack bands for {name}")
     return stacked
 
-def total_area(layer):
-    total = 0.0
-    for feature in layer.getFeatures():
-        total += feature.geometry().area()
-    return total
-
 # BEGIN PROCESSING BLOCK
 def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output, agreement_output, year0, temp_option):
     context = QgsProcessingContext()
@@ -403,32 +397,13 @@ def compare_xgb_simex(xgb_input_path, simex_input_path, xgb_output, simex_output
     print(f"Legality Agreement Matrix (Pixel Count): \n{legality_df.to_string()}")
     print(f"Legal Agreement: {legal_agreement} \nIllegal Agreement: {illegal_agreement}")
 
-    # # compute fractional area agreement using Zonal Histogram tool
-    # zonal_hist_layer = processing.run(
-    #     "native:zonalhistogram",
-    #     {
-    #         "INPUT_RASTER"  : xgb_layer,
-    #         "RASTER_BAND"   : xgb_fields.index("pred"),
-    #         "INPUT_VECTOR"  : simex_polys,
-    #         "OUTPUT"        : "memory:"
-    #     },
-    #     context=context, feedback=feedback, is_child_algorithm=True,
-    # )
-
-    # zonal_hist_layer = processing.run(
-    #     "native:fieldcalculator",
-    #     {
-    #         ""
-    #     }
-    # )
-
     # build record for the year to return, round to 4 decimal places
     row_output = [year0, n_00, n_01, n_10, n_11, prod_intact, omiss_intact, prod_logged, omiss_logged, user_intact, commiss_intact, user_logged, commiss_logged,
                   overall_agreement, quantity_disagreement, allocation_disagreement,
                   legal_intact, legal_logged, legal_total, legal_agreement, illegal_intact, illegal_logged, illegal_total, illegal_agreement,
                   b0, b1, bT, burned_confusion]
 
-    print("Done! Files are saved at the paths specified in the OUTPUTS folder.")
+    print("Year completed successfully...")
 
     return (
         xgb_output,
@@ -441,7 +416,6 @@ if __name__ == "__main__":
 
 # ============================================== CONFIG OPTIONS =========================================================
 
-
     #specify collection of years to analyze
     years = [2019, 2020, 2021, 2022, 2023, 2024]
 
@@ -450,12 +424,20 @@ if __name__ == "__main__":
     # if 0 is not selected, ensure SIMEX shapefile includes at least one year before the first XGBoost year, and the one year after the last XGBoost year for correct results
     temporal_handling_mode = 0
 
-    # specify file names to export results as
-    xgb_filename = 'xgb'
-    simex_filename = 'simex'
-    agreement_filename = 'agreement'
-    logging_metrics_filename = 'main_agreement_metrics'
-    burned_legality_metrics_filename = 'auxiliary_agreement_metrics'
+    # specify INPUT file names
+    # must be shapefiles, do not include the .shp file extension at the end
+    # please ensure all associated shapefile files are present in the same INPUTS folder
+    # xgb_input files must have the four-digit year present at the beginning of the name (YYYY_[yourfilenamehere].shp)
+    xgb_input = "results"
+    simex_input = "simex_polys"
+
+    # specify OUTPUT file names to export results
+    xgb_filename = "xgb"
+    simex_filename = "simex"
+    agreement_filename = "agreement"
+    logging_metrics_filename = "main_agreement_metrics"
+    burned_legality_metrics_filename = "auxiliary_agreement_metrics"
+    results_filename = "results"
 
     # QGIS installation location (double check, this default value is a typical location)
     qgis_install = r"C:/PROGRA~1/QGIS34~1.11/apps/qgis-ltr"
@@ -500,11 +482,11 @@ if __name__ == "__main__":
         print(f"ANALYZING YEAR {year0} ------------------------------------------------------------")
         try:
             results = compare_xgb_simex(
-                xgb_input_path = fr"./INPUTS/{year0}_results.shp",
-                simex_input_path = r"./INPUTS/simex_polys.shp",
-                xgb_output = fr"./OUTPUTS/{year0}_{xgb_filename}.tif",
-                simex_output = fr"./OUTPUTS/{year0}_{simex_filename}.tif",
-                agreement_output = fr"./OUTPUTS/{year0}_{agreement_filename}.tif",
+                xgb_input_path      = fr"./INPUTS/{year0}_{xgb_input}.shp",
+                simex_input_path    = fr"./INPUTS/{simex_input}.shp",
+                xgb_output          = fr"./OUTPUTS/{year0}_{xgb_filename}.tif",
+                simex_output        = fr"./OUTPUTS/{year0}_{simex_filename}.tif",
+                agreement_output    = fr"./OUTPUTS/{year0}_{agreement_filename}.tif",
                 year0 = year0,
                 temp_option = temporal_handling_mode,
             )
@@ -516,7 +498,7 @@ if __name__ == "__main__":
 
     qgs.exitQgis() #exit QGIS (removes provider and layer registries from memory)
 
-    results_df.to_csv(r"./OUTPUTS/results.csv", index=False)
+    results_df.to_csv(fr"./OUTPUTS/{results_filename}.csv", index=False)
 
     fig = plt.figure(figsize=(12,8))
     plt.plot(results_df['Year'], results_df['Overall Agreement'], label="Overall Agreement", color = 'g')
@@ -543,3 +525,5 @@ if __name__ == "__main__":
     plt.legend()
     plt.ticklabel_format(useOffset=False)
     plt.savefig(fr"./OUTPUTS/{burned_legality_metrics_filename}.png", dpi = 300, bbox_inches = "tight")
+
+    print("Done! Files are saved at the paths specified in the OUTPUTS folder.")
