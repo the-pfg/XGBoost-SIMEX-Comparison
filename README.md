@@ -14,7 +14,7 @@ A PyQGIS script to compare land cover classification output by an XGBoost model 
   - `C:/Program Files/QGIS 3.xx.xx/apps/qgis-ltr/python`
   - `C:/Program Files/QGIS 3.xx.xx/apps/qgis-ltr/python/plugins`
 
-Running the XGB-SIMEX-comparison-PyQGIS.py file should now produce the desired results. If there are additional missing modules/plugins, they may be in other locations within your QGIS installation.
+Running the XGB-SIMEX-comparison-PyQGIS.py file should now produce the desired results. If there are additional missing modules/packages, they may be in other locations within your QGIS installation.
 
 ## Using the Script
 
@@ -31,7 +31,7 @@ The XGB raster is a multi-band raster .tif file that contains the bands:\
 4 - the predicted class (hard classification). 0 = burned, 1 = logged, 2 = intact
 
 #### SIMEX Raster
-The SIMEX raster is a multi-bad raster .tif file that contains the bands:\
+The SIMEX raster is a multi-band raster .tif file that contains the bands:\
 1 - The year of logging within SIMEX. The "no logging" polygon is labelled as the year of analysis/"year0"\
 2 - The legality of the logging polygon. -1 = no logging area, 0 = legal, 1 = illegal
 
@@ -41,10 +41,10 @@ The agreement raster is a single-band raster that characterizes the agreement/di
 2 - Both datasets agree there is no logging / intact\
 3 - XGB classifies as intact within a SIMEX polygon\
 4 - XGB classifies as logged outside of a SIMEX polygon\
-5 - XGB classifies as burned withing a SIMEX polygon\
+5 - XGB classifies as burned within a SIMEX polygon\
 6 - XGB classifies as burned outside of a SIMEX polygon
 
-#### results.csv and Metric Graphs
+#### results.csv and Comparison Metric Graphs
 The `results.csv` file appears in the OUTPUTS folder and contains all comparison metrics seen in the python console output for each year. The comparison metric graphs are simple line plots displaying the comparison
 metrics over time. The graphs will only appear correctly if more than one year is analyzed.
 
